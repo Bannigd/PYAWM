@@ -19,31 +19,7 @@ def gen_subs_diff(R, U_comps):
 
 
 def list_subs(eqs: list, subs: dict):
-    return list(map(lambda eq: eq.subs(subs), eqs))
-
-
-# def construct_maxwell_eqs():
-#     """
-#     constructs and returns maxwell equations (only vector part)
-#     """
-#     R = CoordSys3D("")
-#     delop = Del()  # nabla
-#     Ex, Ey, Ez = sp.symbols("E_x E_y E_z", cls=sp.Function)
-#     Hx, Hy, Hz = sp.symbols("H_x H_y H_z", cls=sp.Function)
-#     E_vfield = (
-#         Ex(R.x, R.y, R.z, t) * R.i
-#         + Ey(R.x, R.y, R.z, t) * R.j
-#         + Ez(R.x, R.y, R.z, t) * R.k
-#     )
-#     H_vfield = (
-#         Hx(R.x, R.y, R.z, t) * R.i
-#         + Hy(R.x, R.y, R.z, t) * R.j
-#         + Hz(R.x, R.y, R.z, t) * R.k
-#     )
-#     curl_E = (delop.cross(E_vfield) + mu / c * H_vfield.diff(t)).to_matrix(R)
-#     curl_H = (delop.cross(H_vfield) - epsilon / c * E_vfield.diff(t)).to_matrix(R)
-#     return curl_E, curl_H
-#
+    return list(map(lambda eq: eq.subs(subs).expand().simplify(), eqs))
 
 
 def gen_vector_field_symbols(R, order=0):
@@ -61,22 +37,28 @@ def gen_vector_field_symbols(R, order=0):
         Hx(R.x, R.y, R.z) * R.i + Hy(R.x, R.y, R.z) * R.j + Hz(R.x, R.y, R.z) * R.k
         for Hx, Hy, Hz in H_symbols
     ]
-    E_asympt = sum(
-        map(
-            lambda k, vec: vec / (sp.I * omega) ** k,
-            range(order + 1),
-            E_vec_comps,
-        ),
-        0 * R.i,
-    )  # 0*R.i determines return type
-    H_asympt = sum(
-        map(
-            lambda k, vec: vec / (sp.I * omega) ** k,
-            range(order + 1),
-            H_vec_comps,
-        ),
-        0 * R.i,
-    )
+    E_asympt = [
+        sum(
+            map(
+                lambda k, vec: vec / (sp.I * omega) ** k,
+                range(s + 1),
+                E_vec_comps,
+            ),
+            0 * R.i,
+        )
+        for s in range(order + 1)
+    ]  # 0*R.i determines return type
+    H_asympt = [
+        sum(
+            map(
+                lambda k, vec: vec / (sp.I * omega) ** k,
+                range(s + 1),
+                H_vec_comps,
+            ),
+            0 * R.i,
+        )
+        for s in range(order + 1)
+    ]
     return E_symbols, H_symbols, E_vec_comps, H_vec_comps, E_asympt, H_asympt
 
 
@@ -90,17 +72,21 @@ def gen_maxwell_eqs(
     H_vec_comps,
     E_asympt,
     H_asympt,
+    order=0,
+    prev_order_eqs=None,
 ):
     curl_E = (
         (
             (
                 delop.cross(
-                    E_asympt * sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
+                    E_asympt[order]
+                    * sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
                 )
                 + mu
                 / c
                 * (
-                    H_asympt * sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
+                    H_asympt[order]
+                    * sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
                 ).diff(t)
             )
             .doit()
@@ -108,19 +94,21 @@ def gen_maxwell_eqs(
             / sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
         )
         .expand()
-        .subs(gen_subs_diff(R, E_vec_comps[0]))
+        .subs(gen_subs_diff(R, E_vec_comps[order]))
     )
 
     curl_H = (
         (
             (
                 delop.cross(
-                    H_asympt * sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
+                    H_asympt[order]
+                    * sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
                 )
                 + epsilon
                 / c
                 * (
-                    E_asympt * sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
+                    E_asympt[order]
+                    * sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
                 ).diff(t)
             )
             .doit()
@@ -128,25 +116,36 @@ def gen_maxwell_eqs(
             / sp.exp(sp.I * omega * t - sp.I * omega / c * phi(R.z))
         )
         .expand()
-        .subs(gen_subs_diff(R, H_vec_comps[0]))
+        .subs(gen_subs_diff(R, H_vec_comps[order]))
     )
+
     maxwell_eqs = list_subs(
         [sp.Eq(eq, 0) for eq in list(curl_E) + list(curl_H)], {R.x: x, R.y: y, R.z: z}
     )
+
+    if prev_order_eqs is not None:
+        maxwell_eqs = [
+            sp.Eq((maxwell_eqs[i].lhs - prev_order_eqs[i].lhs).expand(), 0)
+            for i in range(6)
+        ]
+
+    # WARNING: only for zero order for now
     maxwell_alg_eqs = {
-        H_symbols[0][0](x, y, z): sp.solve(maxwell_eqs[0], H_symbols[0][0](x, y, z))[0],
-        E_symbols[0][0](x, y, z): sp.solve(maxwell_eqs[3], E_symbols[0][0](x, y, z))[0],
+        H_symbols[order][0](x, y, z): sp.solve(
+            maxwell_eqs[0], H_symbols[order][0](x, y, z)
+        )[0],
+        E_symbols[order][0](x, y, z): sp.solve(
+            maxwell_eqs[3], E_symbols[order][0](x, y, z)
+        )[0],
     }
 
     maxwell_diff_eqs = list(
         filter(
-            lambda x: x is not sp.sympify(True), list_subs(maxwell_eqs, maxwell_alg_eqs)
+            lambda x: x is not (sp.sympify(True) or 0),
+            list_subs(maxwell_eqs, maxwell_alg_eqs),
         )
     )
-    vars_subs = gen_vars_subs([E_symbols[0], H_symbols[0]])
-
-    maxwell_diff_eqs = list_subs(maxwell_diff_eqs, vars_subs)
-    return maxwell_alg_eqs, maxwell_diff_eqs
+    return maxwell_eqs, maxwell_alg_eqs, maxwell_diff_eqs
 
 
 def main():
@@ -154,13 +153,13 @@ def main():
     R = CoordSys3D("")
     delop = Del()  # nabla
     phi = sp.Function("phi")
-    order = 0  # order of expansion
+    max_order = 1  # order of expansion
     E_symbols, H_symbols, E_vec_comps, H_vec_comps, E_asympt, H_asympt = (
-        gen_vector_field_symbols(R, order=order)
+        gen_vector_field_symbols(R, order=max_order)
     )
 
     # contsruct Maxwell's equations
-    maxwell_alg_eqs, maxwell_diff_eqs = gen_maxwell_eqs(
+    maxwell_eqs, maxwell_alg_eqs, maxwell_diff_eqs = gen_maxwell_eqs(
         R,
         delop,
         phi,
@@ -170,22 +169,49 @@ def main():
         H_vec_comps,
         E_asympt,
         H_asympt,
+        order=0,
+    )
+
+    vars_subs_0 = gen_vars_subs([E_symbols[0], H_symbols[0]])
+    vars_subs_1 = gen_vars_subs([E_symbols[1], H_symbols[1]])
+
+    eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
+        R,
+        delop,
+        phi,
+        E_symbols,
+        H_symbols,
+        E_vec_comps,
+        H_vec_comps,
+        E_asympt,
+        H_asympt,
+        order=1,
+        prev_order_eqs=maxwell_eqs,
+    )
+
+    preview(
+        list_subs(diff_eqs_1, vars_subs_1),
+        output="png",
+        dvioptions=["-D 600"],
+        euler=False,
     )
 
     # solve ODE system
     sols = dsolve_system(
-        maxwell_diff_eqs,
+        list_subs(diff_eqs_1, vars_subs_1),
         funcs=[
-            E_symbols[0][1](x),
-            E_symbols[0][2](x),
-            H_symbols[0][1](x),
-            H_symbols[0][2](x),
+            E_symbols[1][1](x),
+            E_symbols[1][2](x),
+            H_symbols[1][1](x),
+            H_symbols[1][2](x),
         ],
         t=x,
     )[0]
 
-    # preview([curl_E, curl_H], output="png", dvioptions=["-D 600"], euler=False)
-    # preview([maxwell_diff_eqs, sols], output="png", dvioptions=["-D 600"], euler=False)
+    preview(sols[0].simplify(), output="png", dvioptions=["-D 600"], euler=False)
+    # preview(sols[1], output="png", dvioptions=["-D 600"], euler=False)
+    # preview(sols[2], output="png", dvioptions=["-D 600"], euler=False)
+    # preview(sols[3], output="png", dvioptions=["-D 600"], euler=False)
 
     # check if solution is correct
     sols_subs = {sol.lhs: sol.rhs for sol in sols}
