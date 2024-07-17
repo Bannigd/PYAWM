@@ -25,9 +25,10 @@ def list_subs(eqs: list, subs: dict, eval=True):
         return list(map(lambda eq: eq.subs(subs), eqs))
 
 
-def check_sols(sols):
-    sols_subs = {sol.lhs: sol.rhs for sol in sols}
-    return [sol.subs(sols_subs).simplify() for sol in sols]
+def check_sols(eqs, sols):
+    sols_subs = {sol.lhs.func(x, y, z): sol.rhs for sol in sols}
+    check = list_subs(eqs, sols_subs)
+    return check
 
 
 def gen_vector_field_symbols(R, order=0):
@@ -264,7 +265,7 @@ def main():
         ],
         t=x,
     )[0]
-    assert check_sols(sols_0) == [True, True, True, True]
+    assert check_sols(diff_eqs_0, sols_0) == [True, True, True, True]
 
     # sols_1 = dsolve_system(
     #     list_subs(diff_eqs_1, vars_subs_1),
@@ -276,7 +277,7 @@ def main():
     #     ],
     #     t=x,
     # )[0]
-    # assert check_sols(sols_1) == [True, True, True, True]
+    # assert check_sols(diff_eqs_1, sols_1) == [True, True, True, True]
 
     # preview(sols_1[0], output="png", dvioptions=["-D 600"], euler=False)
     # preview(sols_1[1], output="png", dvioptions=["-D 600"], euler=False)
