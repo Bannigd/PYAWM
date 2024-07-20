@@ -138,25 +138,27 @@ def gen_maxwell_eqs(
             for i in range(6)
         ]
 
-    maxwell_alg_eqs = {
-        H_symbols[order][0](x, y, z): sp.solve(
-            maxwell_eqs[0], H_symbols[order][0](x, y, z)
-        )[0],
-        E_symbols[order][0](x, y, z): sp.solve(
-            maxwell_eqs[3], E_symbols[order][0](x, y, z)
-        )[0],
-    }
+    maxwell_alg_eqs = [
+        sp.Eq(
+            E_symbols[order][0](x, y, z),
+            sp.solve(maxwell_eqs[3], E_symbols[order][0](x, y, z))[0],
+        ),
+        sp.Eq(
+            H_symbols[order][0](x, y, z),
+            sp.solve(maxwell_eqs[0], H_symbols[order][0](x, y, z))[0],
+        ),
+    ]
 
     maxwell_diff_eqs = list(
         filter(
             lambda x: x is not (sp.sympify(True) or 0),
-            list_subs(maxwell_eqs, maxwell_alg_eqs),
+            list_subs(maxwell_eqs, {eq.lhs: eq.rhs for eq in maxwell_alg_eqs}),
         )
     )
     return maxwell_eqs, maxwell_alg_eqs, maxwell_diff_eqs
 
 
-def layered_sols(sols, layer_symbol, order):
+def layered_sols(sols, layer_symbol, order) -> list:
     # WARNING:order of symbols here is "hard-coded" for author's convenience
     match layer_symbol:
         case "c":
@@ -174,10 +176,10 @@ def layered_sols(sols, layer_symbol, order):
             sols = list_subs(
                 sols,
                 {
-                    sp.Symbol("C4"): sp.Symbol(f"A_{order}^{layer_symbol}"),
+                    sp.Symbol("C1"): sp.Symbol(f"A_{order}^{layer_symbol}"),
                     sp.Symbol("C2"): sp.Symbol(f"B_{order}^{layer_symbol}"),
                     sp.Symbol("C3"): sp.Symbol(f"C_{order}^{layer_symbol}"),
-                    sp.Symbol("C1"): sp.Symbol(f"D_{order}^{layer_symbol}"),
+                    sp.Symbol("C4"): sp.Symbol(f"D_{order}^{layer_symbol}"),
                 },
                 eval=False,
             )
@@ -199,13 +201,16 @@ def layered_sols(sols, layer_symbol, order):
                 sol.lhs: comp,
                 epsilon: sp.Symbol(f"epsilon_{layer_symbol}"),
                 mu: sp.Symbol(f"mu_{layer_symbol}"),
+                sp.Function(f"eta")(z): sp.Function(f"eta_{layer_symbol}")(z),
             }
         )
         for sol, comp in zip(
             sols,
             [
+                sp.Function(f"E^{{x,{layer_symbol}}}_{order}")(x),
                 sp.Function(f"E^{{y,{layer_symbol}}}_{order}")(x),
                 sp.Function(f"E^{{z,{layer_symbol}}}_{order}")(x),
+                sp.Function(f"H^{{x,{layer_symbol}}}_{order}")(x),
                 sp.Function(f"H^{{y,{layer_symbol}}}_{order}")(x),
                 sp.Function(f"H^{{z,{layer_symbol}}}_{order}")(x),
             ],
@@ -213,11 +218,36 @@ def layered_sols(sols, layer_symbol, order):
     ]
 
 
+def gen_boundry_conds(R, delop, U, border_func, func_value, layers, order):
+    normal = delop(border_func).doit()
+    char_U = str(list(U.components.values())[0])[0]
+    nU_1 = normal.cross(U).subs(
+        {
+            U.components[R.i]: sp.Function(f"{char_U}^{{x,{layers[0]}}}_{order}")(x),
+            U.components[R.j]: sp.Function(f"{char_U}^{{y,{layers[0]}}}_{order}")(x),
+            U.components[R.k]: sp.Function(f"{char_U}^{{z,{layers[0]}}}_{order}")(x),
+        }
+    )
+
+    nU_2 = normal.cross(U).subs(
+        {
+            U.components[R.i]: sp.Function(f"{char_U}^{{x,{layers[1]}}}_{order}")(x),
+            U.components[R.j]: sp.Function(f"{char_U}^{{y,{layers[1]}}}_{order}")(x),
+            U.components[R.k]: sp.Function(f"{char_U}^{{z,{layers[1]}}}_{order}")(x),
+        }
+    )
+
+    boundry_eqs = (nU_1 - nU_2).subs({x: func_value, R.y: y, R.z: z})
+
+    return [sp.Eq(boundry_eqs.components[arg], 0) for arg in [R.j, R.k]]
+
+
 def main():
     # setup sympy symbols
     R = CoordSys3D("")
     delop = Del()  # nabla
     phi = sp.Function("phi")
+    eta = sp.Function("eta")
     max_order = 1  # order of expansion
     E_symbols, H_symbols, E_vec_comps, H_vec_comps, E_asympt, H_asympt = (
         gen_vector_field_symbols(R, order=max_order)
@@ -237,25 +267,25 @@ def main():
         order=0,
     )
 
-    eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
-        R,
-        delop,
-        phi,
-        E_symbols,
-        H_symbols,
-        E_vec_comps,
-        H_vec_comps,
-        E_asympt,
-        H_asympt,
-        order=1,
-        prev_order_eqs=eqs_0,
-    )
+    # eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
+    #     R,
+    #     delop,
+    #     phi,
+    #     E_symbols,
+    #     H_symbols,
+    #     E_vec_comps,
+    #     H_vec_comps,
+    #     E_asympt,
+    #     H_asympt,
+    #     order=1,
+    #     prev_order_eqs=eqs_0,
+    # )
 
     vars_subs_0 = gen_vars_subs([E_symbols[0], H_symbols[0]])
     vars_subs_1 = gen_vars_subs([E_symbols[1], H_symbols[1]])
 
     # solve ODE system
-    sols_0 = dsolve_system(
+    diff_sols_0 = dsolve_system(
         list_subs(diff_eqs_0, vars_subs_0),
         funcs=[
             E_symbols[0][1](x),
@@ -265,8 +295,19 @@ def main():
         ],
         t=x,
     )[0]
-    assert check_sols(diff_eqs_0, sols_0) == [True, True, True, True]
+    assert check_sols(diff_eqs_0, diff_sols_0) == [True, True, True, True]
 
+    sols_0 = [
+        alg_eqs_0[0].subs({eq.lhs.func(x, y, z): eq.rhs for eq in diff_sols_0}),
+        diff_sols_0[0],
+        diff_sols_0[1],
+        alg_eqs_0[1].subs({eq.lhs.func(x, y, z): eq.rhs for eq in diff_sols_0}),
+        diff_sols_0[2],
+        diff_sols_0[3],
+    ]
+    sols_0 = list_subs(
+        sols_0, {sp.sqrt(-epsilon * mu + sp.diff(phi(z), z) ** 2): eta(z)}
+    )
     # sols_1 = dsolve_system(
     #     list_subs(diff_eqs_1, vars_subs_1),
     #     funcs=[
@@ -285,15 +326,45 @@ def main():
     # preview(sols_1[3], output="png", dvioptions=["-D 600"], euler=False)
 
     # Construct solutions for different layers
+    sols_0_layers = {
+        layer: layered_sols(sols_0, layer, order=0) for layer in ["c", "f", "s"]
+    }
 
-    sols_0_layers = {layer: layered_sols(sols_0, layer, 0) for layer in ["c", "f", "s"]}
     # Now solving for 2D waveguide with smoothly irregular transition, x=h(z)
 
     # boundry conditions
-    # h = sp.Function('h')
-    # border = R.x-h(R.z)
-    # normal = delop(border).doit()
-    # normal.cross(E_vec_comps[0]).to_matrix(R)
+    h = sp.Function("h")
+    border_func = R.x - h(R.z)
+    E_boundry_cf = gen_boundry_conds(
+        R, delop, E_vec_comps[0], border_func, h(z), ["c", "f"], order=0
+    )
+
+    H_boundry_cf = gen_boundry_conds(
+        R, delop, H_vec_comps[0], border_func, h(z), ["c", "f"], order=0
+    )
+
+    E_boundry_fs = gen_boundry_conds(
+        R, delop, E_vec_comps[0], border_func, 0, ["f", "s"], order=0
+    )
+
+    H_boundry_fs = gen_boundry_conds(
+        R, delop, H_vec_comps[0], border_func, 0, ["f", "s"], order=0
+    )
+
+    boundry_eqs = list_subs(
+        E_boundry_cf + H_boundry_cf + E_boundry_fs + H_boundry_fs,
+        {eq.lhs: eq.rhs for eq in (sols_0_layers["c"] + sols_0_layers["f"])},
+    )
+    coeffs = [
+        sp.Symbol(f"A_0^c"),
+        sp.Symbol(f"B_0^c"),
+        sp.Symbol(f"A_0^f"),
+        sp.Symbol(f"B_0^f"),
+        sp.Symbol(f"C_0^f"),
+        sp.Symbol(f"D_0^f"),
+        sp.Symbol(f"A_0^s"),
+        sp.Symbol(f"B_0^s"),
+    ]
 
 
 if __name__ == "__main__":
