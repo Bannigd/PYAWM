@@ -1,4 +1,10 @@
+# directories
 .ipynb_checkpoints
 .pyre
 __pycache__
-*.ipynb
+images
+
+# files
+*.png
+tmux-session.sh
+# *.ipynb

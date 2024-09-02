@@ -1,14 +1,20 @@
+from datetime import date, datetime
+from functools import reduce
 from itertools import chain, product
+from pathlib import Path
 
 import sympy as sp
+from sympy import latex
 from sympy.abc import c, epsilon, mu, omega, t, x, y, z
 from sympy.printing import preview
 from sympy.solvers.ode.systems import dsolve_system
 from sympy.vector import CoordSys3D, Del
 
 
-def gen_vars_subs(U_symbols):
-    return {U(x, y, z): U(x) for U in list(chain.from_iterable(U_symbols))}
+def gen_vars_subs(U_symbols, args_before, args_after):
+    return {
+        U(*args_before): U(*args_after) for U in list(chain.from_iterable(U_symbols))
+    }
 
 
 def gen_subs_diff(R, U_comps):
@@ -26,9 +32,8 @@ def list_subs(eqs: list, subs: dict, eval=True):
 
 
 def check_sols(eqs, sols):
-    sols_subs = {sol.lhs.func(x, y, z): sol.rhs for sol in sols}
-    check = list_subs(eqs, sols_subs)
-    return check
+    sols_subs = {sol.lhs: sol.rhs for sol in sols}
+    return list_subs(eqs, sols_subs)
 
 
 def gen_vector_field_symbols(R, order=0):
@@ -129,7 +134,9 @@ def gen_maxwell_eqs(
     )
 
     maxwell_eqs = list_subs(
-        [sp.Eq(eq, 0) for eq in list(curl_E) + list(curl_H)], {R.x: x, R.y: y, R.z: z}
+        [sp.Eq(eq, 0) for eq in list(curl_E) + list(curl_H)],
+        {R.x: x, R.y: y, R.z: z},
+        eval=False,
     )
 
     if prev_order_eqs is not None:
@@ -159,7 +166,8 @@ def gen_maxwell_eqs(
 
 
 def layered_sols(sols, layer_symbol, order) -> list:
-    # WARNING:order of symbols here is "hard-coded" for author's convenience
+    # TODO: add a param to signal what exponents (with `+` or `-`) to omit
+    # WARNING: order of symbols here is "hard-coded" for author's convenience
     match layer_symbol:
         case "c":
             sols = list_subs(
@@ -201,7 +209,7 @@ def layered_sols(sols, layer_symbol, order) -> list:
                 sol.lhs: comp,
                 epsilon: sp.Symbol(f"epsilon_{layer_symbol}"),
                 mu: sp.Symbol(f"mu_{layer_symbol}"),
-                sp.Function(f"eta")(z): sp.Function(f"eta_{layer_symbol}")(z),
+                sp.Function("eta")(z): sp.Function(f"eta_{layer_symbol}")(z),
             }
         )
         for sol, comp in zip(
@@ -218,7 +226,7 @@ def layered_sols(sols, layer_symbol, order) -> list:
     ]
 
 
-def gen_boundry_conds(R, delop, U, border_func, func_value, layers, order):
+def gen_boundry_conds(R, delop, U, border_func, border_func_value, layers, order):
     normal = delop(border_func).doit()
     char_U = str(list(U.components.values())[0])[0]
     nU_1 = normal.cross(U).subs(
@@ -237,9 +245,36 @@ def gen_boundry_conds(R, delop, U, border_func, func_value, layers, order):
         }
     )
 
-    boundry_eqs = (nU_1 - nU_2).subs({x: func_value, R.y: y, R.z: z})
+    boundry_eqs = (nU_1 - nU_2).subs({x: border_func_value, R.y: y, R.z: z})
 
     return [sp.Eq(boundry_eqs.components[arg], 0) for arg in [R.j, R.k]]
+
+
+def save_latex_as_image(equations, filename):
+    image_time_prefix = datetime.today().strftime("%y-%m-%d--%H-%M-%S--")
+    today = date.today().isoformat()
+    image_today_path = Path(f"./images/{today}")
+    image_today_path.mkdir(parents=True, exist_ok=True)
+
+    with open(
+        f"{str(image_today_path)}/{image_time_prefix}{filename}.png",
+        "wb",
+    ) as out:
+        if isinstance(equations, list):
+            output = reduce(
+                lambda x, y: x + y,
+                [latex(eq, mode="equation*") for eq in equations],
+                "",
+            )
+        else:
+            output = latex(equations, mode="equation*")
+        preview(
+            output,
+            viewer="BytesIO",
+            outputbuffer=out,
+            dvioptions=["-D 200"],
+            euler=False,
+        )
 
 
 def main():
@@ -248,6 +283,7 @@ def main():
     delop = Del()  # nabla
     phi = sp.Function("phi")
     eta = sp.Function("eta")
+    gamma = sp.Function("gamma")
     max_order = 1  # order of expansion
     E_symbols, H_symbols, E_vec_comps, H_vec_comps, E_asympt, H_asympt = (
         gen_vector_field_symbols(R, order=max_order)
@@ -266,27 +302,19 @@ def main():
         H_asympt,
         order=0,
     )
-
-    # eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
-    #     R,
-    #     delop,
-    #     phi,
-    #     E_symbols,
-    #     H_symbols,
-    #     E_vec_comps,
-    #     H_vec_comps,
-    #     E_asympt,
-    #     H_asympt,
-    #     order=1,
-    #     prev_order_eqs=eqs_0,
-    # )
-
-    vars_subs_0 = gen_vars_subs([E_symbols[0], H_symbols[0]])
-    vars_subs_1 = gen_vars_subs([E_symbols[1], H_symbols[1]])
+    eqs_0 = list_subs(
+        eqs_0, gen_vars_subs([E_symbols[0], H_symbols[0]], [x, y, z], [x])
+    )
+    alg_eqs_0 = list_subs(
+        alg_eqs_0, gen_vars_subs([E_symbols[0], H_symbols[0]], [x, y, z], [x])
+    )
+    diff_eqs_0 = list_subs(
+        diff_eqs_0, gen_vars_subs([E_symbols[0], H_symbols[0]], [x, y, z], [x])
+    )
 
     # solve ODE system
     diff_sols_0 = dsolve_system(
-        list_subs(diff_eqs_0, vars_subs_0),
+        diff_eqs_0,
         funcs=[
             E_symbols[0][1](x),
             E_symbols[0][2](x),
@@ -295,35 +323,105 @@ def main():
         ],
         t=x,
     )[0]
+
     assert check_sols(diff_eqs_0, diff_sols_0) == [True, True, True, True]
+    print("Found and checked solution to zero-order method")
 
     sols_0 = [
-        alg_eqs_0[0].subs({eq.lhs.func(x, y, z): eq.rhs for eq in diff_sols_0}),
+        alg_eqs_0[0].subs({eq.lhs: eq.rhs for eq in diff_sols_0}),
         diff_sols_0[0],
         diff_sols_0[1],
-        alg_eqs_0[1].subs({eq.lhs.func(x, y, z): eq.rhs for eq in diff_sols_0}),
+        alg_eqs_0[1].subs({eq.lhs: eq.rhs for eq in diff_sols_0}),
         diff_sols_0[2],
         diff_sols_0[3],
     ]
-    sols_0 = list_subs(
-        sols_0, {sp.sqrt(-epsilon * mu + sp.diff(phi(z), z) ** 2): eta(z)}
-    )
-    # sols_1 = dsolve_system(
-    #     list_subs(diff_eqs_1, vars_subs_1),
-    #     funcs=[
-    #         E_symbols[1][1](x),
-    #         E_symbols[1][2](x),
-    #         H_symbols[1][1](x),
-    #         H_symbols[1][2](x),
-    #     ],
-    #     t=x,
-    # )[0]
-    # assert check_sols(diff_eqs_1, sols_1) == [True, True, True, True]
 
-    # preview(sols_1[0], output="png", dvioptions=["-D 600"], euler=False)
-    # preview(sols_1[1], output="png", dvioptions=["-D 600"], euler=False)
-    # preview(sols_1[2], output="png", dvioptions=["-D 600"], euler=False)
-    # preview(sols_1[3], output="png", dvioptions=["-D 600"], euler=False)
+    sols_0 = list_subs(
+        sols_0,
+        {
+            omega / c * sp.sqrt(-epsilon * mu + sp.diff(phi(z), z) ** 2): gamma(z),
+            -epsilon * mu + sp.diff(phi(z), z) ** 2: eta(z),
+        },
+        eval=False,
+    )
+    save_latex_as_image(sols_0, "general_solution_zero_order")
+
+    eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
+        R,
+        delop,
+        phi,
+        E_symbols,
+        H_symbols,
+        E_vec_comps,
+        H_vec_comps,
+        E_asympt,
+        H_asympt,
+        order=1,
+        prev_order_eqs=list_subs(
+            eqs_0, gen_vars_subs([E_symbols[0], H_symbols[0]], [x], [x, y, z])
+        ),
+    )
+
+    derivs_subs = {
+        sp.Derivative(E_symbols[0][0](x, z), z): sp.Function("S_1")(x, z),
+        sp.Derivative(H_symbols[0][1](x, z), z): sp.Function("S_2")(x, z),
+        sp.Derivative(H_symbols[0][0](x, z), z): sp.Function("S_3")(x, z),
+        sp.Derivative(E_symbols[0][1](x, z), z): sp.Function("S_4")(x, z),
+    }
+
+    eqs_1 = list_subs(
+        eqs_1,
+        gen_vars_subs([E_symbols[1], H_symbols[1]], [x, y, z], [x])
+        | gen_vars_subs([E_symbols[0], H_symbols[0]], [x, y, z], [x, z])
+        | derivs_subs,
+    )
+    alg_eqs_1 = list_subs(
+        alg_eqs_1,
+        gen_vars_subs([E_symbols[1], H_symbols[1]], [x, y, z], [x])
+        | gen_vars_subs([E_symbols[0], H_symbols[0]], [x, y, z], [x, z])
+        | derivs_subs,
+    )
+    diff_eqs_1 = list_subs(
+        diff_eqs_1,
+        gen_vars_subs([E_symbols[1], H_symbols[1]], [x, y, z], [x])
+        | gen_vars_subs([E_symbols[0], H_symbols[0]], [x, y, z], [x, z])
+        | derivs_subs,
+    )
+
+    save_latex_as_image(diff_eqs_1, "diff_eqs_1")
+
+    sols_1 = dsolve_system(
+        # list_subs(diff_eqs_1, derivs_subs),
+        diff_eqs_1,
+        funcs=[
+            E_symbols[1][1](x),
+            E_symbols[1][2](x),
+            H_symbols[1][1](x),
+            H_symbols[1][2](x),
+        ],
+        t=x,
+    )[0]
+    print("Found solution to first-order method")
+
+    # NOTE: A *LOT* of compute time to check
+    # assert check_sols(diff_eqs_1, sols_1) == [True, True, True, True]
+    # print("Checked solution to first-order method")
+
+    sols_1 = list_subs(
+        sols_1,
+        {
+            omega / c * sp.sqrt(-epsilon * mu + sp.diff(phi(z), z) ** 2): gamma(z),
+            -epsilon * mu + sp.diff(phi(z), z) ** 2: eta(z),
+        },
+        eval=False,
+    )
+
+    sols_1 = [
+        eq.replace(sp.Integral, lambda *args: sp.simplify(sp.Integral(*args)))
+        for eq in sols_1
+    ]
+
+    save_latex_as_image(sols_1, "general_solution_first_order")
 
     # Construct solutions for different layers
     sols_0_layers = {
@@ -356,15 +454,17 @@ def main():
         {eq.lhs: eq.rhs for eq in (sols_0_layers["c"] + sols_0_layers["f"])},
     )
     coeffs = [
-        sp.Symbol(f"A_0^c"),
-        sp.Symbol(f"B_0^c"),
-        sp.Symbol(f"A_0^f"),
-        sp.Symbol(f"B_0^f"),
-        sp.Symbol(f"C_0^f"),
-        sp.Symbol(f"D_0^f"),
-        sp.Symbol(f"A_0^s"),
-        sp.Symbol(f"B_0^s"),
+        sp.Symbol("A_0^c"),
+        sp.Symbol("B_0^c"),
+        sp.Symbol("A_0^f"),
+        sp.Symbol("B_0^f"),
+        sp.Symbol("C_0^f"),
+        sp.Symbol("D_0^f"),
+        sp.Symbol("A_0^s"),
+        sp.Symbol("B_0^s"),
     ]
+
+    save_latex_as_image(boundry_eqs, "boundry_eqs")
 
 
 if __name__ == "__main__":
