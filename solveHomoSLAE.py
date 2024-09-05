@@ -4,15 +4,13 @@ from itertools import chain
 
 import sympy as sp
 
-from main import save_latex_as_image
-
 
 def solve_subsystem(eqs: list[sp.Eq], vars: list[sp.Symbol]) -> list:
     # first is to reduce system to one equation
     coeff1 = eqs[0].lhs.coeff(vars[0])
     coeff2 = eqs[1].lhs.coeff(vars[0])
     single_eq = eqs[1].lhs * coeff1 - eqs[0].lhs * coeff2
-    single_eq = single_eq.simplify().collect(vars)
+    single_eq = single_eq.expand().collect(vars, sp.combsimp)
 
     # solve for 2 remaining variables
     # need minus because `single_eq` has form: a1*x1 + a2*x2=0, and method needs a1*x1 - a2*x2=0
