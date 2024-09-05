@@ -10,6 +10,8 @@ from sympy.printing import preview
 from sympy.solvers.ode.systems import dsolve_system
 from sympy.vector import CoordSys3D, Del
 
+from solveHomoSLAE import solve_all
+
 
 def gen_vars_subs(U_symbols, args_before, args_after):
     return {
@@ -167,9 +169,17 @@ def gen_maxwell_eqs(
 
 def layered_sols(sols, layer_symbol, order) -> list:
     # TODO: add a param to signal what exponents (with `+` or `-`) to omit
-    # WARNING: order of symbols here is "hard-coded" for author's convenience
+    # WARNING: order of substituting symbols here is "hard-coded" for author's convenience
     match layer_symbol:
         case "c":
+            # x -> x-h(z) eases calculation
+            sols = [
+                sol.replace(
+                    sp.exp, lambda arg: sp.exp(arg.subs({x: x - sp.Function("h")(z)}))
+                )
+                for sol in sols
+            ]
+
             sols = list_subs(
                 sols,
                 {
@@ -210,6 +220,7 @@ def layered_sols(sols, layer_symbol, order) -> list:
                 epsilon: sp.Symbol(f"epsilon_{layer_symbol}"),
                 mu: sp.Symbol(f"mu_{layer_symbol}"),
                 sp.Function("eta")(z): sp.Function(f"eta_{layer_symbol}")(z),
+                sp.Function("gamma")(z): sp.Function(f"gamma_{layer_symbol}")(z),
             }
         )
         for sol, comp in zip(
@@ -344,8 +355,124 @@ def main():
         },
         eval=False,
     )
-    save_latex_as_image(sols_0, "general_solution_zero_order")
 
+    # remove denominator to shorten expressions
+    sols_0 = list_subs(
+        sols_0,
+        {
+            sp.Symbol("C1"): sp.Symbol("C1") * sp.sqrt(eta(z)),
+            sp.Symbol("C2"): sp.Symbol("C2") * sp.sqrt(eta(z)),
+            sp.Symbol("C3"): sp.Symbol("C3") * epsilon,
+            sp.Symbol("C4"): sp.Symbol("C4") * epsilon,
+        },
+        eval=False,
+    )
+
+    # save_latex_as_image(sols_0, "general_solution_zero_order")
+
+    # Construct solutions for different layers
+    sols_0_layers = {
+        layer: layered_sols(sols_0, layer, order=0) for layer in ["c", "f", "s"]
+    }
+
+    # Now solving for 2D waveguide with smoothly irregular transition, x=h(z)
+
+    # boundry conditions
+    h = sp.Function("h")
+    border_func = R.x - h(R.z)
+
+    E_boundry_cf_0 = gen_boundry_conds(
+        R, delop, E_vec_comps[0], border_func, h(z), ["c", "f"], order=0
+    )
+
+    H_boundry_cf_0 = gen_boundry_conds(
+        R, delop, H_vec_comps[0], border_func, h(z), ["c", "f"], order=0
+    )
+
+    E_boundry_fs_0 = gen_boundry_conds(
+        R, delop, E_vec_comps[0], border_func, 0, ["f", "s"], order=0
+    )
+
+    H_boundry_fs_0 = gen_boundry_conds(
+        R, delop, H_vec_comps[0], border_func, 0, ["f", "s"], order=0
+    )
+
+    boundry_eqs_0 = list_subs(
+        E_boundry_cf_0 + H_boundry_cf_0 + E_boundry_fs_0 + H_boundry_fs_0,
+        {
+            eq.lhs: eq.rhs
+            for eq in list_subs(
+                sols_0_layers["c"] + sols_0_layers["f"], {x: h(z)}, eval=False
+            )
+            + list_subs(sols_0_layers["f"] + sols_0_layers["s"], {x: 0}, eval=False)
+        },
+        eval=False,
+    )
+
+    # order is intentional to produce block-diagonal matrix
+    coeffs_0 = [
+        # TE
+        sp.Symbol("A_0^c"),
+        sp.Symbol("A_0^f"),
+        sp.Symbol("B_0^f"),
+        sp.Symbol("A_0^s"),
+        # TM
+        sp.Symbol("B_0^c"),
+        sp.Symbol("C_0^f"),
+        sp.Symbol("D_0^f"),
+        sp.Symbol("B_0^s"),
+    ]
+
+    # reorder equations to block-diagonal matrix of coefficients
+    new_ord = [1, 2, 5, 6, 0, 3, 4, 7]
+    boundry_eqs_0 = [boundry_eqs_0[i] for i in new_ord]
+    M_0, _ = sp.linear_eq_to_matrix(boundry_eqs_0, coeffs_0)
+
+    M_0_TE = M_0[:4, :4]
+    coeffs_0_TE = coeffs_0[:4]
+    M_0_TM = M_0[4:, 4:]
+    coeffs_0_TM = coeffs_0[4:]
+
+    # sp.pprint(M_0)
+    eqs_0_TE = [
+        sp.Eq(eq.collect(coeffs_0_TE, sp.combsimp), 0)
+        for eq in M_0_TE * sp.matrices.Matrix(coeffs_0_TE)
+    ]
+    eqs_0_TM = [
+        sp.Eq(eq.collect(coeffs_0_TM, sp.combsimp), 0)
+        for eq in M_0_TM * sp.matrices.Matrix(coeffs_0_TM)
+    ]
+    # sp.pprint(eqs_0_TE)
+    sol_coeffs_0_TE = solve_all(eqs_0_TE, coeffs_0_TE)
+    sol_coeffs_0_TM = solve_all(eqs_0_TM, coeffs_0_TM)
+    sol_coeffs_0_TE = [
+        {
+            coeff: expr.expand().collect(sp.exp(sp.Wild("w")), sp.simplify)
+            for coeff, expr in sol.items()
+        }
+        for sol in sol_coeffs_0_TE
+    ]
+    sol_coeffs_0_TM = [
+        {
+            coeff: expr.expand().collect(sp.exp(sp.Wild("w")), sp.simplify)
+            for coeff, expr in sol.items()
+        }
+        for sol in sol_coeffs_0_TM
+    ]
+
+    save_latex_as_image(sol_coeffs_0_TE, "coeffs_0_TE_all")
+    save_latex_as_image(sol_coeffs_0_TM, "coeffs_0_TM_all")
+    print(
+        "found coefficients from boundry conditions for TE- and TM-mode in zeroth order"
+    )
+
+    # TODO: check if expressions found are indeed solutions to the system
+    # after substitution one of four equations has to contain Det(M),
+    # which has to be zero for non-trivial solution to exist
+    # (manually done in jupyter, will add here some other time)
+    # ref: https://doi.org/10.1134/S0361768822020049
+
+    return
     eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
         R,
         delop,
@@ -388,7 +515,7 @@ def main():
         | derivs_subs,
     )
 
-    save_latex_as_image(diff_eqs_1, "diff_eqs_1")
+    # save_latex_as_image(diff_eqs_1, "diff_eqs_1")
 
     sols_1 = dsolve_system(
         # list_subs(diff_eqs_1, derivs_subs),
@@ -421,50 +548,7 @@ def main():
         for eq in sols_1
     ]
 
-    save_latex_as_image(sols_1, "general_solution_first_order")
-
-    # Construct solutions for different layers
-    sols_0_layers = {
-        layer: layered_sols(sols_0, layer, order=0) for layer in ["c", "f", "s"]
-    }
-
-    # Now solving for 2D waveguide with smoothly irregular transition, x=h(z)
-
-    # boundry conditions
-    h = sp.Function("h")
-    border_func = R.x - h(R.z)
-    E_boundry_cf = gen_boundry_conds(
-        R, delop, E_vec_comps[0], border_func, h(z), ["c", "f"], order=0
-    )
-
-    H_boundry_cf = gen_boundry_conds(
-        R, delop, H_vec_comps[0], border_func, h(z), ["c", "f"], order=0
-    )
-
-    E_boundry_fs = gen_boundry_conds(
-        R, delop, E_vec_comps[0], border_func, 0, ["f", "s"], order=0
-    )
-
-    H_boundry_fs = gen_boundry_conds(
-        R, delop, H_vec_comps[0], border_func, 0, ["f", "s"], order=0
-    )
-
-    boundry_eqs = list_subs(
-        E_boundry_cf + H_boundry_cf + E_boundry_fs + H_boundry_fs,
-        {eq.lhs: eq.rhs for eq in (sols_0_layers["c"] + sols_0_layers["f"])},
-    )
-    coeffs = [
-        sp.Symbol("A_0^c"),
-        sp.Symbol("B_0^c"),
-        sp.Symbol("A_0^f"),
-        sp.Symbol("B_0^f"),
-        sp.Symbol("C_0^f"),
-        sp.Symbol("D_0^f"),
-        sp.Symbol("A_0^s"),
-        sp.Symbol("B_0^s"),
-    ]
-
-    save_latex_as_image(boundry_eqs, "boundry_eqs")
+    # save_latex_as_image(sols_1, "general_solution_first_order")
 
 
 if __name__ == "__main__":
