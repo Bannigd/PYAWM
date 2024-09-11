@@ -1,15 +1,11 @@
-from datetime import date, datetime
-from functools import reduce
 from itertools import chain, product
-from pathlib import Path
 
 import sympy as sp
-from sympy import latex
 from sympy.abc import c, epsilon, mu, omega, t, x, y, z
-from sympy.printing import preview
 from sympy.solvers.ode.systems import dsolve_system
 from sympy.vector import CoordSys3D, Del
 
+from preview_wrappers import preview_collection, save_latex_as_image
 from solveHomoSLAE import solve_all
 
 
@@ -305,50 +301,6 @@ def gen_boundry_conds(R, delop, U, border_func, border_func_value, layers, order
     return [sp.Eq(boundry_eqs.components[arg], 0) for arg in [R.j, R.k]]
 
 
-def preview_collection(equations):
-    if isinstance(equations, list):
-        out = reduce(
-            lambda x, y: x + y,
-            [latex(eq, mode="equation*") for eq in equations],
-            "",
-        )
-    else:
-        out = latex(equations, mode="equation*")
-    preview(
-        out,
-        output="png",
-        dvioptions=["-D 200"],
-        euler=False,
-    )
-
-
-def save_latex_as_image(equations, filename):
-    image_time_prefix = datetime.today().strftime("%y-%m-%d--%H-%M-%S--")
-    today = date.today().isoformat()
-    image_today_path = Path(f"./images/{today}")
-    image_today_path.mkdir(parents=True, exist_ok=True)
-
-    with open(
-        f"{str(image_today_path)}/{image_time_prefix}{filename}.png",
-        "wb",
-    ) as out:
-        if isinstance(equations, list):
-            output = reduce(
-                lambda x, y: x + y,
-                [latex(eq, mode="equation*") for eq in equations],
-                "",
-            )
-        else:
-            output = latex(equations, mode="equation*")
-        preview(
-            output,
-            viewer="BytesIO",
-            outputbuffer=out,
-            dvioptions=["-D 200"],
-            euler=False,
-        )
-
-
 def main():
     # setup sympy symbols
     R = CoordSys3D("")
@@ -534,6 +486,7 @@ def main():
     # (manually done in jupyter, will add here some other time)
     # ref: https://doi.org/10.1134/S0361768822020049
 
+    return
     eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
         R,
         delop,
