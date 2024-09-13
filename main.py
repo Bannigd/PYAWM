@@ -301,6 +301,38 @@ def gen_boundry_conds(R, delop, U, border_func, border_func_value, layers, order
     return [sp.Eq(boundry_eqs.components[arg], 0) for arg in [R.j, R.k]]
 
 
+def boundry_check_all_solutions(eqs, vars, all_sols):
+    """
+    we need to show, that equation is True or is a multiple of Determinant
+    ref: https://doi.org/10.1134/S0361768822020049
+    """
+    M, b = sp.linear_eq_to_matrix(eqs, vars)
+
+    if b != sp.zeros(len(vars), 1):
+        raise ValueError("`eqs` must be a homogeneous system")
+
+    eqs_lhs = [eq.lhs - eq.rhs for eq in eqs]
+
+    det = M.det(method="berkowitz").expand().combsimp()
+
+    for i, sol in enumerate(all_sols):
+        system = list_subs(eqs_lhs, sol, eval=False)
+        system = [
+            eq.expand()
+            .combsimp()
+            .subs({det: sp.Symbol("|M|"), -det: -sp.Symbol("|M|")})
+            for eq in system
+        ]
+
+        print(f"for solution {i+1}:")
+        for eq in system:
+            if eq == 0:
+                print("\tOK")
+            elif eq.has(sp.Symbol("|M|")):
+                print("\tOK (has det(M))")
+        # preview_collection(system)
+
+
 def main():
     # setup sympy symbols
     R = CoordSys3D("")
@@ -443,20 +475,13 @@ def main():
 
     M_0_TE = M_0[:4, :4]
     sym_coeffs_0_TE = sym_coeffs_0[:4]
-    M_0_TM = M_0[4:, 4:]
-    sym_coeffs_0_TM = sym_coeffs_0[4:]
 
     eqs_0_TE = [
         sp.Eq(eq.collect(sym_coeffs_0_TE, sp.combsimp), 0)
         for eq in M_0_TE * sp.matrices.Matrix(sym_coeffs_0_TE)
     ]
-    eqs_0_TM = [
-        sp.Eq(eq.collect(sym_coeffs_0_TM, sp.combsimp), 0)
-        for eq in M_0_TM * sp.matrices.Matrix(sym_coeffs_0_TM)
-    ]
 
     sol_coeffs_0_TE = solve_all(eqs_0_TE, sym_coeffs_0_TE)
-    sol_coeffs_0_TM = solve_all(eqs_0_TM, sym_coeffs_0_TM)
 
     sol_coeffs_0_TE = [
         {
@@ -466,10 +491,23 @@ def main():
         for sol in sol_coeffs_0_TE
     ]
     print(f"0: found coefficients for TE-mode:{sym_coeffs_0_TE}")
+    # save_latex_as_image(sol_coeffs_0_TE, "coeffs_0_TE_all")
+
+    # boundry_check_all_solutions(eqs_0_TE, sym_coeffs_0_TE, sol_coeffs_0_TE)
+    # print("0: check all variants of the solutions to boundry equations TE mode")
+
+    M_0_TM = M_0[4:, 4:]
+    sym_coeffs_0_TM = sym_coeffs_0[4:]
+    eqs_0_TM = [
+        sp.Eq(eq.collect(sym_coeffs_0_TM, sp.combsimp), 0)
+        for eq in M_0_TM * sp.matrices.Matrix(sym_coeffs_0_TM)
+    ]
+
+    sol_coeffs_0_TM = solve_all(eqs_0_TM, sym_coeffs_0_TM)
 
     sol_coeffs_0_TM = [
         {
-            coeff: expr.expand().collect(sp.exp(sp.Wild("w")), sp.simplify)
+            coeff: expr.expand().collect(sp.exp(sp.Wild("w")), sp.combsimp)
             for coeff, expr in sol.items()
         }
         for sol in sol_coeffs_0_TM
@@ -477,14 +515,16 @@ def main():
 
     print(f"0: found coefficients for TM-mode:{sym_coeffs_0_TM}")
 
-    save_latex_as_image(sol_coeffs_0_TE, "coeffs_0_TE_all")
-    save_latex_as_image(sol_coeffs_0_TM, "coeffs_0_TM_all")
+    # NOTE: unable to finish with default algortims. Manually checked for 3rd
+    # and 4th sets.
+    # boundry_check_all_solutions(eqs_0_TM, sym_coeffs_0_TM, sol_coeffs_0_TM)
+    # print("0: check all variants of the solutions to boundry equations TM mode")
+
+    # save_latex_as_image(sol_coeffs_0_TM, "coeffs_0_TM_all")
 
     # TODO: check if expressions found are indeed solutions to the system
     # after substitution one of four equations has to contain Det(M),
     # which has to be zero for non-trivial solution to exist
-    # (manually done in jupyter, will add here some other time)
-    # ref: https://doi.org/10.1134/S0361768822020049
 
     return
     eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
@@ -650,7 +690,7 @@ def main():
     # reorder equations to block-diagonal matrix of coefficients
     new_ord = [1, 2, 5, 6, 0, 3, 4, 7]
     boundry_eqs_1 = [boundry_eqs_1[i] for i in new_ord]
-    M_1, b = sp.linear_eq_to_matrix(boundry_eqs_1, sym_coeffs_1)
+    M_1, _ = sp.linear_eq_to_matrix(boundry_eqs_1, sym_coeffs_1)
 
     # preview(
     #     (M_1, b),
