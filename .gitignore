@@ -8,3 +8,4 @@ images
 *.png
 tmux-session.sh
 # *.ipynb
+/.virtual_documents/
