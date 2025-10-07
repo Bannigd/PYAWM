@@ -333,7 +333,7 @@ def boundry_check_all_solutions(eqs, vars, all_sols):
         # preview_collection(system)
 
 
-def main():
+if __name__ == "__main__":
     # setup sympy symbols
     R = CoordSys3D("")
     delop = Del()  # nabla
@@ -492,7 +492,7 @@ def main():
     ]
     print(f"0: found coefficients for TE-mode:{sym_coeffs_0_TE}")
     # save_latex_as_image(sol_coeffs_0_TE, "coeffs_0_TE_all")
-
+    
     # boundry_check_all_solutions(eqs_0_TE, sym_coeffs_0_TE, sol_coeffs_0_TE)
     # print("0: check all variants of the solutions to boundry equations TE mode")
 
@@ -741,7 +741,3 @@ def main():
 
     save_latex_as_image(det_1_TM, "determinant_1_TM")
     save_latex_as_image(sol_coeffs_1_TM, "coeffs_1_TM")
-
-
-if __name__ == "__main__":
-    main()
