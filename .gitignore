@@ -9,3 +9,4 @@ images
 tmux-session.sh
 # *.ipynb
 /.virtual_documents/
+/src/TAGS

@@ -522,11 +522,6 @@ def main():
 
     # save_latex_as_image(sol_coeffs_0_TM, "coeffs_0_TM_all")
 
-    # TODO: check if expressions found are indeed solutions to the system
-    # after substitution one of four equations has to contain Det(M),
-    # which has to be zero for non-trivial solution to exist
-
-    return
     eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
         R,
         delop,
