@@ -4,6 +4,8 @@ import sympy as sp
 from sympy.abc import c, epsilon, mu, omega, t, x, y, z
 from sympy.solvers.ode.systems import dsolve_system
 from sympy.vector import CoordSys3D, Del
+import numpy as np
+from scipy.optimize import bisect
 
 from preview_wrappers import preview_collection, save_latex_as_image
 from solveHomoSLAE import solve_all
@@ -332,6 +334,12 @@ def boundry_check_all_solutions(eqs, vars, all_sols):
                 print("\tOK (has det(M))")
         # preview_collection(system)
 
+def add_layer_index(symbol, layer):
+    if symbol.is_Function:
+        return sp.Function(f'{symbol.name}_{layer}')
+    if symbol.is_Symbol:        
+        return sp.Symbol(f'{symbol.name}_{layer}')
+        
 
 if __name__ == "__main__":
     # setup sympy symbols
@@ -517,10 +525,79 @@ if __name__ == "__main__":
 
     # NOTE: unable to finish with default algortims. Manually checked for 3rd
     # and 4th sets.
-    # bouindry_check_all_solutions(eqs_0_TM, sym_coeffs_0_TM, sol_coeffs_0_TM)
+    # boundry_check_all_solutions(eqs_0_TM, sym_coeffs_0_TM, sol_coeffs_0_TM)
     # print("0: check all variants of the solutions to boundry equations TM mode")
 
     # save_latex_as_image(sol_coeffs_0_TM, "coeffs_0_TM_all")
+
+    # NUMERICAL COMPUTATIONS
+
+    layers = ['c', 'f', 's']
+    symbolic_subs = dict()
+    for layer in layers:
+        epsilon_layer = add_layer_index(epsilon, layer)
+        mu_layer = add_layer_index(mu, layer)        
+        symbolic_subs[add_layer_index(eta, layer)(z)] = -epsilon_layer * mu_layer + sp.diff(phi(z), z) ** 2
+        symbolic_subs[add_layer_index(gamma, layer)(z)] = omega / c * sp.sqrt(-epsilon_layer * mu_layer + sp.diff(phi(z), z) ** 2)
+
+    num_lambda = sp.Float(0.55)
+    h1 = 2*num_lambda
+    h2 = 3*num_lambda
+    L = 100*num_lambda
+    beta = sp.Symbol('beta')
+
+    numeric_parameters = {
+        sp.Symbol('epsilon_c') : sp.Float(1.0)**2,
+        sp.Symbol('epsilon_f') : sp.Float(1.565)**2,
+        sp.Symbol('epsilon_s') : sp.Float(1.47)**2,
+        h(z)                   : 2*(h1-h2)*(z/L)**3-3*(h1-h2)*(z/L)**2+h1,
+        sp.Symbol('mu_c')      : sp.Float(1.0),
+        sp.Symbol('mu_f')      : sp.Float(1.0),
+        sp.Symbol('mu_s')      : sp.Float(1.0),
+        omega/c                : 2*sp.pi/num_lambda,
+        sp.diff(phi(z),z)      : beta,
+    }
+
+    M_0_TE_num = sp.lambdify([beta, z], M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit(), 
+                                   modules=[{'sqrt':np.emath.sqrt},'numpy'])
+    def get_determinant_TE(beta, z):
+        M = M_0_TE_num(beta, z)
+        det = np.linalg.det(M)
+        return det.imag+det.real
+
+    M_0_TM_num = sp.lambdify([beta, z], M_0_TM.subs(symbolic_subs).subs(numeric_parameters).doit(), 
+                                   modules=[{'sqrt':np.emath.sqrt},'numpy'])
+    def get_determinant_TM(beta, z):
+        M = M_0_TM_num(beta, z)
+        det = np.linalg.det(M)
+        return det.imag+det.real
+    
+    beta_results = [
+        bisect(lambda b: get_determinant_TE(b, 0), 1.54, 1.56, xtol=1e-16),
+        bisect(lambda b: get_determinant_TE(b, 0), 1.50, 1.52, xtol=1e-16),
+        bisect(lambda b: get_determinant_TM(b, 0), 1.54, 1.56, xtol=1e-16),
+        bisect(lambda b: get_determinant_TM(b, 0), 1.50, 1.52, xtol=1e-16)
+        ]    
+    # check beta with results from https://link.springer.com/chapter/10.1007/978-3-030-26831-2_8
+    beta_previous_results = [
+        1.5514927380692901290,
+        1.5117506145374407068,
+        1.5501811158901042864,
+        1.5072749512764207624
+        ]
+        
+    print(f"Comparison with previous results:")
+    print(f"old\tnew\terr")
+    for beta_old, beta_new in zip(beta_previous_results, beta_results):
+        print(beta_old, beta_new, abs(beta_old-beta_new))
+            
+
+    quit()
+    #
+    # FIRST APPROXIMATION
+    #
+    
+
 
     eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
         R,
