@@ -4,8 +4,12 @@ import sympy as sp
 from sympy.abc import c, epsilon, mu, omega, t, x, y, z
 from sympy.solvers.ode.systems import dsolve_system
 from sympy.vector import CoordSys3D, Del
+from sympy.utilities.autowrap import autowrap
+from sympy.utilities.autowrap import ufuncify
+
 import numpy as np
 from scipy.optimize import bisect
+
 
 from preview_wrappers import preview_collection, save_latex_as_image
 from solveHomoSLAE import solve_all
@@ -544,7 +548,7 @@ if __name__ == "__main__":
     h1 = 2*num_lambda
     h2 = 3*num_lambda
     L = 100*num_lambda
-    beta = sp.Symbol('beta')
+    beta = sp.Symbol('beta', complex=True) # hinting f2py backend to generate code for complex numbers
 
     numeric_parameters = {
         sp.Symbol('epsilon_c') : sp.Float(1.0)**2,
@@ -558,19 +562,33 @@ if __name__ == "__main__":
         sp.diff(phi(z),z)      : beta,
     }
 
-    M_0_TE_num = sp.lambdify([beta, z], M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit(), 
-                                   modules=[{'sqrt':np.emath.sqrt},'numpy'])
+    sp.utilities.codegen.COMPLEX_ALLOWED = True
+    M_0_TE_num = autowrap(M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit(), backend='f2py')
     def get_determinant_TE(beta, z):
         M = M_0_TE_num(beta, z)
         det = np.linalg.det(M)
         return det.imag+det.real
 
-    M_0_TM_num = sp.lambdify([beta, z], M_0_TM.subs(symbolic_subs).subs(numeric_parameters).doit(), 
-                                   modules=[{'sqrt':np.emath.sqrt},'numpy'])
+    M_0_TM_num = autowrap(M_0_TM.subs(symbolic_subs).subs(numeric_parameters).doit(), backend='f2py')
     def get_determinant_TM(beta, z):
         M = M_0_TM_num(beta, z)
         det = np.linalg.det(M)
         return det.imag+det.real
+
+
+    # M_0_TE_num = sp.lambdify([beta, z], M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit(), 
+    #                                modules=[{'sqrt':np.emath.sqrt},'numpy'])
+    # def get_determinant_TE(beta, z):
+    #     M = M_0_TE_num(beta, z)
+    #     det = np.linalg.det(M)
+    #     return det.imag+det.real
+
+    # M_0_TM_num = sp.lambdify([beta, z], M_0_TM.subs(symbolic_subs).subs(numeric_parameters).doit(), 
+    #                                modules=[{'sqrt':np.emath.sqrt},'numpy'])
+    # def get_determinant_TM(beta, z):
+    #     M = M_0_TM_num(beta, z)
+    #     det = np.linalg.det(M)
+    #     return det.imag+det.real
     
     beta_results = [
         bisect(lambda b: get_determinant_TE(b, 0), 1.54, 1.56, xtol=1e-16),

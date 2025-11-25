@@ -4,6 +4,8 @@ import sympy as sp
 from sympy.abc import c, epsilon, mu, omega, t, x, y, z
 from sympy.solvers.ode.systems import dsolve_system
 from sympy.vector import CoordSys3D, Del
+from sympy.utilities.autowrap import autowrap
+from sympy.utilities.autowrap import ufuncify
 
 import numpy as np
 from scipy.optimize import bisect
@@ -595,8 +597,8 @@ if __name__ == "__main__":
         symbolic_subs[add_layer_index(gamma, layer)(z)] = omega / c * sp.sqrt(-epsilon_layer * mu_layer + sp.diff(phi(z), z) ** 2)
 
     num_lambda = sp.Float(0.55)
-    beta = sp.Symbol('beta')
-    dh = sp.Symbol(r'\delta h')
+    beta = sp.Symbol('beta', complex=True)
+    dh = sp.Symbol(r'dh', real=True)
     numeric_parameters = {
         sp.Symbol('epsilon_c') : sp.Float(1.0)**2,
         sp.Symbol('epsilon_l') : sp.Float(3.61),
@@ -612,13 +614,19 @@ if __name__ == "__main__":
         sp.diff(phi(z),z)**2   : beta**2,
     }
        
-
-    M_0_TE_num = sp.lambdify([beta, dh], M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit(), 
-                                   modules=[{'sqrt':np.emath.sqrt},'numpy'])
+    sp.utilities.codegen.COMPLEX_ALLOWED = True
+    M_0_TE_num = autowrap(M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit(), backend='f2py')
     def get_determinant_TE(beta, dh):
         M = M_0_TE_num(beta, dh)
         det = np.linalg.det(M)
         return det.imag+det.real
+
+    # M_0_TE_num = sp.lambdify([beta, dh], M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit(), 
+    #                                modules=[{'sqrt':np.emath.sqrt},'numpy'])
+    # def get_determinant_TE(beta, dh):
+    #     M = M_0_TE_num(beta, dh)
+    #     det = np.linalg.det(M)
+    #     return det.imag+det.real
 
     lens_index_path = "IndexProf_2000_points.txt"
     if True: # do we need to recompute lens profile?
@@ -636,20 +644,20 @@ if __name__ == "__main__":
         # beta_0 это к.ф.з. для трехслойного волновода, на границе линзы, когда dh=0 
         beta_0 = bisect(lambda b: get_determinant_TE(b, 0), 1.54, 1.6, xtol=1e-16)
 
-        dh = [0.]
-        beta = [beta_0]
+        dh_num = [0.]
+        beta_num = [beta_0]
         for i in range(1, len(data)):
-            beta.append(beta_0*data[i][1]) # beta=beta_0*n_eff
-            dh.append(bisect(lambda dh: get_determinant_TE(beta[i], dh), dh[i-1], dh[i-1]+.2, xtol=1e-16))
+            beta_num.append(beta_0*data[i][1]) # beta=beta_0*n_eff
+            dh_num.append(bisect(lambda dh: get_determinant_TE(beta_num[i], dh), dh_num[i-1], dh_num[i-1]+.2, xtol=1e-16))
     
     
         plt.figure(figsize=(20,6))
-        plt.plot(np.linspace(-1,1, len(dh)*2), list(map(lambda dh: dh+2*num_lambda, dh+dh[::-1])))
+        plt.plot(np.linspace(-1,1, len(dh_num)*2), list(map(lambda dh: dh+2*num_lambda, dh_num+dh_num[::-1])))
         plt.savefig("../images/lens_profile.png")
 
         # saving luneberg lens profile 
         with open('luneberg_lens_profile.txt', 'w') as f:
             f.write('r, n_eff(r,f), dh, beta\n')
             for i in range(len(data)):
-                f.write(f'{data[i][0]},{data[i][1]},{dh[i]},{beta[i]}\n')
+                f.write(f'{data[i][0]},{data[i][1]},{dh_num[i]},{beta_num[i]}\n')
 
