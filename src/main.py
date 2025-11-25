@@ -5,7 +5,6 @@ from sympy.abc import c, epsilon, mu, omega, t, x, y, z
 from sympy.solvers.ode.systems import dsolve_system
 from sympy.vector import CoordSys3D, Del
 from sympy.utilities.autowrap import autowrap
-from sympy.utilities.autowrap import ufuncify
 
 import numpy as np
 from scipy.optimize import bisect
@@ -563,33 +562,17 @@ if __name__ == "__main__":
     }
 
     sp.utilities.codegen.COMPLEX_ALLOWED = True
-    M_0_TE_num = autowrap(M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit(), backend='f2py')
+    det_M_0_TE_num = autowrap(M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit().to_DM().det(), backend='f2py')
     def get_determinant_TE(beta, z):
-        M = M_0_TE_num(beta, z)
-        det = np.linalg.det(M)
+        det = det_M_0_TE_num(beta, z)
         return det.imag+det.real
 
-    M_0_TM_num = autowrap(M_0_TM.subs(symbolic_subs).subs(numeric_parameters).doit(), backend='f2py')
+    det_M_0_TM_num = autowrap(M_0_TM.subs(symbolic_subs).subs(numeric_parameters).doit().to_DM().det(), backend='f2py')
     def get_determinant_TM(beta, z):
-        M = M_0_TM_num(beta, z)
-        det = np.linalg.det(M)
+        det = det_M_0_TM_num(beta, z)
         return det.imag+det.real
 
 
-    # M_0_TE_num = sp.lambdify([beta, z], M_0_TE.subs(symbolic_subs).subs(numeric_parameters).doit(), 
-    #                                modules=[{'sqrt':np.emath.sqrt},'numpy'])
-    # def get_determinant_TE(beta, z):
-    #     M = M_0_TE_num(beta, z)
-    #     det = np.linalg.det(M)
-    #     return det.imag+det.real
-
-    # M_0_TM_num = sp.lambdify([beta, z], M_0_TM.subs(symbolic_subs).subs(numeric_parameters).doit(), 
-    #                                modules=[{'sqrt':np.emath.sqrt},'numpy'])
-    # def get_determinant_TM(beta, z):
-    #     M = M_0_TM_num(beta, z)
-    #     det = np.linalg.det(M)
-    #     return det.imag+det.real
-    
     beta_results = [
         bisect(lambda b: get_determinant_TE(b, 0), 1.54, 1.56, xtol=1e-16),
         bisect(lambda b: get_determinant_TE(b, 0), 1.50, 1.52, xtol=1e-16),
