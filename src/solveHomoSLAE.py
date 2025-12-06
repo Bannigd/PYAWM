@@ -44,7 +44,7 @@ def solve_all(eqs, vars):
     all_permutations = subsystems_permutations(eq_pairs_idx)
 
     for pair, eq_idx in all_permutations:
-        sol = dict()
+        sol = {}
         curr_vars = vars_in_eq[pair[0]]
         sol = solve_subsystem([eqs[i] for i in pair], curr_vars)
         last_var = (set(vars) - set(curr_vars)).pop()
