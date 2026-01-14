@@ -1,0 +1,22 @@
+
+pyawm.py,295
+def gen_vars_subs(7,115
+def gen_subs_diff(13,277
+def list_subs(20,443
+def check_sols(25,616
+def gen_vector_field_symbols(30,733
+def gen_maxwell_eqs(70,1901
+def layered_sols(159,4202
+def gen_boundry_conds(301,9294
+def boundry_check_all_solutions(325,10260
+def add_layer_index(357,11216
+
+preview_wrappers.py,62
+def preview_collection(9,152
+def save_latex_as_image(26,533
+
+solveHomoSLAE.py,104
+def solve_subsystem(8,121
+def solve_all(29,806
+def subsystems_permutations(57,1673
+def main(72,2124

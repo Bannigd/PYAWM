@@ -1,8 +1,9 @@
 from itertools import chain, product
 
 import sympy as sp
-from sympy.abc import c, epsilon, mu, omega, t, x, y, z
+from sympy.abc import c, mu, omega, t, x, y, z
 
+epsilon = sp.Symbol("varepsilon")
 
 def gen_vars_subs(U_symbols, args_before, args_after):
     return {
@@ -197,15 +198,13 @@ def layered_sols(sols, layer_symbol, order) -> list:
 
     match layer_symbol:
         case "c":
-            # x -> x - h(z) eases calculation (only for 0-order for now)
-            if order == 0:
-                sols = [
-                    sol.replace(
-                        sp.exp,
-                        lambda arg: sp.exp(arg.subs({x: x - sp.Function("h_1")(z)})),
-                    )
-                    for sol in sols
-                ]
+            sols = [
+                sol.replace(
+                    sp.exp,
+                    lambda arg: sp.exp(arg.subs({x: x - sp.Function("h_1")(z)})),
+                )
+                for sol in sols
+            ]
 
             sols = list_subs(
                 sols,
@@ -275,7 +274,7 @@ def layered_sols(sols, layer_symbol, order) -> list:
         sol.xreplace(
             {
                 sol.lhs: comp,
-                epsilon: sp.Symbol(f"epsilon_{layer_symbol}"),
+                epsilon: sp.Symbol(f"varepsilon_{layer_symbol}"),
                 mu: sp.Symbol(f"mu_{layer_symbol}"),
                 sp.Function("eta")(z): sp.Function(f"eta_{layer_symbol}")(z),
                 sp.Function("gamma")(z): sp.Function(f"gamma_{layer_symbol}")(z),

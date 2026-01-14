@@ -1,8 +1,10 @@
 import sympy as sp
-from sympy.abc import c, epsilon, mu, omega, x, y, z
+from sympy.abc import c, mu, omega, x, y, z
 from sympy.solvers.ode.systems import dsolve_system
 from sympy.vector import CoordSys3D, Del
 from sympy.utilities.autowrap import autowrap
+
+epsilon = sp.Symbol("varepsilon")
 
 from scipy.optimize import bisect
 
@@ -90,7 +92,7 @@ if __name__ == "__main__":
         eval=False,
     )
 
-    save_latex_as_image(sols_0, "general_solution_zero_order")
+    # save_latex_as_image(sols_0, "general_solution_zero_order")
 
     # Construct solutions for different layers
     sols_0_layers = {
@@ -216,9 +218,9 @@ if __name__ == "__main__":
     beta = sp.Symbol('beta', complex=True) # hinting f2py backend to generate code for complex numbers
 
     numeric_parameters = {
-        sp.Symbol('epsilon_c') : sp.Float(1.0)**2,
-        sp.Symbol('epsilon_f') : sp.Float(1.565)**2,
-        sp.Symbol('epsilon_s') : sp.Float(1.47)**2,
+        sp.Symbol('varepsilon_c') : sp.Float(1.0)**2,
+        sp.Symbol('varepsilon_f') : sp.Float(1.565)**2,
+        sp.Symbol('varepsilon_s') : sp.Float(1.47)**2,
         h(z)                   : 2*(h1-h2)*(z/L)**3-3*(h1-h2)*(z/L)**2+h1,
         sp.Symbol('mu_c')      : sp.Float(1.0),
         sp.Symbol('mu_f')      : sp.Float(1.0),
@@ -264,8 +266,6 @@ if __name__ == "__main__":
     # FIRST APPROXIMATION
     #
     
-
-
     eqs_1, alg_eqs_1, diff_eqs_1 = gen_maxwell_eqs(
         R,
         delop,
@@ -351,7 +351,7 @@ if __name__ == "__main__":
         eq.replace(sp.Integral, lambda *args: sp.simplify(sp.Integral(*args)))
         for eq in sols_1
     ]
-    save_latex_as_image(sols_1, "solution_1st_order")
+    # save_latex_as_image(sols_1, "solution_1st_order")
 
     # sub particular part of the ode soluiton to avoid dealing with integrals
     U_p_symbols = [
@@ -371,16 +371,16 @@ if __name__ == "__main__":
         layer: layered_sols(sols_1_with_p, layer, order=1) for layer in ["c", "f", "s"]
     }
 
-    save_latex_as_image(sols_1_layers["c"], "sols_1_cover")
-    save_latex_as_image(sols_1_layers["f"], "sols_1_film")
-    save_latex_as_image(sols_1_layers["s"], "sols_1_substrate")
+    # save_latex_as_image(sols_1_layers["c"], "sols_1_cover")
+    # save_latex_as_image(sols_1_layers["f"], "sols_1_film")
+    # save_latex_as_image(sols_1_layers["s"], "sols_1_substrate")
 
     print("1: reconstructed ODE solution to hide particular part")
 
     # Now solving for 2D waveguide with smoothly irregular transition, x=h(z)
 
     # boundry conditions
-    h = sp.Function("h")
+    h = sp.Function("h_1")
     border_func = R.x - h(R.z)
 
     E_boundry_cf_1 = gen_boundry_conds(
@@ -451,8 +451,8 @@ if __name__ == "__main__":
     )
     print(f"1: found and checked coefficients TE-mode:{sym_coeffs_1_TE}")
 
-    save_latex_as_image(det_1_TE, "determinant_1_TE")
-    save_latex_as_image(sol_coeffs_1_TE, "coeffs_1_TE")
+    # save_latex_as_image(det_1_TE, "determinant_1_TE")
+    # save_latex_as_image(sol_coeffs_1_TE, "coeffs_1_TE")
 
     M_1_TM = M_1[4:, 4:]
     sym_coeffs_1_TM = sym_coeffs_1[4:]
@@ -476,5 +476,5 @@ if __name__ == "__main__":
 
     print(f"1: found and checked coefficients TM-mode:{sym_coeffs_1_TM}")
 
-    save_latex_as_image(det_1_TM, "determinant_1_TM")
-    save_latex_as_image(sol_coeffs_1_TM, "coeffs_1_TM")
+    # save_latex_as_image(det_1_TM, "determinant_1_TM")
+    # save_latex_as_image(sol_coeffs_1_TM, "coeffs_1_TM")
