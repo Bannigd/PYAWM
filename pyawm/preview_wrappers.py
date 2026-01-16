@@ -2,7 +2,7 @@ from datetime import date, datetime
 from functools import reduce
 from pathlib import Path
 
-from sympy import latex
+from sympy import latex, Eq
 from sympy.printing import preview
 
 
@@ -11,6 +11,12 @@ def preview_collection(equations):
         out = reduce(
             lambda x, y: x + y,
             [latex(eq, mode="equation*") for eq in equations],
+            "",
+        )
+    if isinstance(equations, dict):
+        out = reduce(
+            lambda x, y: x + y,
+            [latex(Eq(lhs, rhs), mode="equation*") for lhs, rhs in equations.items()],
             "",
         )
     else:
