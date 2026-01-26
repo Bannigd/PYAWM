@@ -12,10 +12,11 @@ def list_subs(eqs: list, subs: dict, eval=False):
         return [eq.subs(subs).expand().simplify() for eq in eqs]
     return [eq.subs(subs) for eq in eqs]
 
-def dict_subs(eqs: dict, subs: dict, eval=False):
-    if eval:
-        return {k: v.subs(subs).expand().simplify() for k, v in eqs.items()}
-    return {k: v.subs(subs) for k, v in eqs.items()}
+def dict_subs(eqs: dict, subs: dict, *, eval=False, both=False):
+    res = dict()
+    for k, v in eqs.items():
+        res[k.subs(subs) if both else k] = v.subs(subs).expand().simplify() if eval else v.subs(subs)
+    return res
 
 # TODO: provide additional info about vars/functions
 t       = sp.Symbol("t")
