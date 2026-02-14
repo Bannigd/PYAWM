@@ -226,8 +226,8 @@ class Domain:
         sols = dict_subs(sols, {k: v for k, v in zip(C_numbers, sym_coeffs, strict=True)})
 
         return sols
-    
-    def solve_zero_order(self):
+
+    def solve_general_form_zero(self):
         order = 0
         """
         Main method for solving awm problem in zero order. Does a lot of things inside.
@@ -317,5 +317,4 @@ if __name__ == "__main__":
     ]
     horn = Waveguide(field_vars, layers, geometry, phi_vars)
     d = Domain(horn)
-    d.solve_zero_order()
-    pass
+    d.solve_general_form_zero()
