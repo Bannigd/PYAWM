@@ -1,6 +1,6 @@
 import sympy as sp
 from sympy.solvers.ode.systems import dsolve_system
-from sympy.vector import CoordSys3D, curl
+from sympy.vector import CoordSys3D, curl, Del
 from sympy.utilities.autowrap import autowrap
 
 from itertools import product
@@ -228,11 +228,10 @@ class Domain:
         return sols
 
     def solve_general_form_zero(self):
-        order = 0
         """
         Main method for solving awm problem in zero order. Does a lot of things inside.
         """
-
+        order = 0
         self._maxwell_equations = self.construct_maxwell_equations()
 
         self.eqs0 = self.construct_equations_wrt_series(order)
@@ -296,13 +295,48 @@ class Domain:
         # Construct solution in each layer
         for layer in self.WG.layers:
             setattr(self, "sols0"+"_"+layer.value, self.layered_sols(self.sols0, layer, order))
-    
+
+
+    def construct_boundary_equations(self, order):
+        R = CoordSys3D("")
+        h_vars = [getattr(R, var.name) for var in self.WG.phi_vars]
+        field_subs = {getattr(R, comp.name): comp for comp in self.WG.field_vars}
+
+        self.boundary_eqs = list()
+        for left_layer, right_layer, border_func in self.WG.geometry:
+            vE_left  = sum([
+                field_axis*getattr(self, f"E{comp}{order}{left_layer.value}").func(*field_subs.keys()) 
+                for comp, field_axis in zip([x, y, z], [R.i, R.j, R.k])], 0*R.i
+                           )
+            vE_right  = sum([
+                field_axis*getattr(self, f"E{comp}{order}{right_layer.value}").func(*field_subs.keys()) 
+                for comp, field_axis in zip([x, y, z], [R.i, R.j, R.k])], 0*R.i
+                           )
+            vH_left  = sum([
+                field_axis*getattr(self, f"E{comp}{order}{left_layer.value}").func(*field_subs.keys()) 
+                for comp, field_axis in zip([x, y, z], [R.i, R.j, R.k])], 0*R.i
+                           )
+            vH_right  = sum([
+                field_axis*getattr(self, f"E{comp}{order}{right_layer.value}").func(*field_subs.keys()) 
+                for comp, field_axis in zip([x, y, z], [R.i, R.j, R.k])], 0*R.i
+                           )
+
+            delop = Del()
+            normal = delop(R.x-border_func(*h_vars)).doit()
+            eq = (normal.cross(vE_left)-normal.cross(vE_right)).subs(field_subs)
+            self.boundary_eqs.extend([eq.components[arg] for arg in [R.j, R.k]])
+            eq = (normal.cross(vH_left)-normal.cross(vH_right)).subs(field_subs)
+            self.boundary_eqs.extend([eq.components[arg] for arg in [R.j, R.k]])
+                        
+
+    def solve_arbitrary_constants(self):
+        raise NotImplementedError("")
     
 if __name__ == "__main__":
     # 2d smoothly irregular waveguide, ref: https://indico.jinr.ru/event/4467/contributions/28934/attachments/20530/35707/starikov_mmcp2024.pdf
     field_vars = [x, z]
     # TODO: change name
-    phi_vars = [z] # and for h(z)
+    phi_vars = [z] # and for h
     layers = [
         Layer.SUBSTRATE,
         Layer.FILM,
@@ -313,8 +347,10 @@ if __name__ == "__main__":
     # Less manual work and should be easier to maintain
     geometry = [
         (Layer.FILM,      Layer.COVER, sp.Function(f"h_{{{Layer.FILM.value}}}")),
-        (Layer.SUBSTRATE, Layer.FILM,  0)
+        (Layer.SUBSTRATE, Layer.FILM,  sp.Function(f"h_{{{Layer.SUBSTRATE.value}}}"))
     ]
     horn = Waveguide(field_vars, layers, geometry, phi_vars)
     d = Domain(horn)
     d.solve_general_form_zero()
+    d.construct_boundary_equations(0)
+    # d.solve_arbitrary_constants()
