@@ -174,7 +174,7 @@ class Domain:
                 sols = {k: v.replace(sp.exp(-x*gamma.func(*self.WG.phi.args)), 0) for k, v in sols.items()}
 
             # For film and lens layers are closed, so asympotic conditions dont apply
-            case Layer.FILM | Layer.FILM:
+            case Layer.FILM | Layer.LENSE:
                 pass
                 
 
