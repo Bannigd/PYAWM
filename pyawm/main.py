@@ -237,8 +237,8 @@ class Domain:
         self.eqs0 = self.construct_equations_wrt_series(order)
         self.eqs0 = self.update_general_solution_form_wrt_waveguide(self.eqs0, order)
 
-        self.diff_eqs0 = [eq for eq in d.eqs0 if eq.find(sp.Derivative(sp.Wild('w'), x))]
-        self.alg_eqs0  = [eq for eq in d.eqs0 if not eq.find(sp.Derivative(sp.Wild('w'), x))]
+        self.diff_eqs0 = [eq for eq in self.eqs0 if eq.find(sp.Derivative(sp.Wild('w'), x))]
+        self.alg_eqs0  = [eq for eq in self.eqs0 if not eq.find(sp.Derivative(sp.Wild('w'), x))]
 
         # TODO: is it too "hard-coded"? Maybe its fine
         self.alg_sols0 = {self.Hx0: sp.solve(self.alg_eqs0[0], self.Hx0)[0],
