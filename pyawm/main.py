@@ -296,6 +296,76 @@ class Domain:
         for layer in self.WG.layers:
             setattr(self, "sols0"+"_"+layer.value, self.layered_sols(self.sols0, layer, order))
 
+    def solve_general_form_first(self):
+        """
+        Main method for solving awm problem in first order. Does a lot of things inside.
+        """
+        order = 1
+        self._maxwell_equations = self.construct_maxwell_equations()
+
+        self.eqs1 = self.construct_equations_wrt_series(order)
+        self.eqs1 = self.update_general_solution_form_wrt_waveguide(self.eqs1, order)
+
+        self.diff_eqs1 = [eq for eq in self.eqs1 if eq.find(sp.Derivative(sp.Wild('w'), x))]
+        self.alg_eqs1  = [eq for eq in self.eqs1 if not eq.find(sp.Derivative(sp.Wild('w'), x))]
+
+        # TODO: is it too "hard-coded"? Maybe its fine
+        self.alg_sols1 = {self.Hx1: sp.solve(self.alg_eqs1[0], self.Hx1)[0],
+                          self.Ex1: sp.solve(self.alg_eqs1[1], self.Ex1)[0]}
+
+        # temporary substitute all functions' arguments (x,y,z) -> (x)
+        sym_func_subs = dict()
+        for U, comp in product(self.U, [y, z]):
+            func = getattr(self, U.name+comp.name+str(order))
+            sym_func_subs[func] = func.func(x)
+
+        temp_diff_eqs = list_subs(self.diff_eqs1, self.alg_sols1)
+        temp_diff_eqs = list(map(lambda eq: eq.doit(), temp_diff_eqs)) # auto reduces d/dy phi(z) 
+        temp_diff_eqs = list_subs(temp_diff_eqs, sym_func_subs)
+        
+        self.diff_sols1 = dsolve_system(
+            temp_diff_eqs,
+            funcs=list(sym_func_subs.values()),
+            t=x,
+        )[0]
+
+        self.diff_sols1 = list_subs(self.diff_sols1, {v: k for k,v in sym_func_subs.items()})
+
+        self.sols1 = self.alg_sols1.copy()
+        for sol in self.diff_sols1:
+            self.sols1[sol.lhs] = sol.rhs
+
+        # TODO: generalize for lens problem 
+        self.sols1 = dict_subs(
+            self.sols1,
+            {
+                omega / c * sp.sqrt(-epsilon * mu + sp.diff(self.WG.phi, z) ** 2): gamma,
+                -epsilon * mu + sp.diff(self.WG.phi, z) ** 2: eta
+            },
+            eval=False,
+        )
+
+        self.sols1[self.Ex1] = self.sols1[self.Ex1].subs(self.sols1)
+        self.sols1[self.Hx1] = self.sols1[self.Hx1].subs(self.sols1)
+        
+        # multiple by a denominator to simplify form
+        self.sols1 = dict_subs(
+            self.sols1,
+            {
+                sp.Symbol("C1"): sp.Symbol("C1") * sp.sqrt(eta),
+                sp.Symbol("C2"): sp.Symbol("C2") * sp.sqrt(eta),
+                sp.Symbol("C3"): sp.Symbol("C3") * epsilon,
+                sp.Symbol("C4"): sp.Symbol("C4") * epsilon,
+            },
+            eval=False,
+        )
+        # preview_collection(self.sols1)
+
+        # Construct solution in each layer
+        for layer in self.WG.layers:
+            setattr(self, "sols1"+"_"+layer.value, self.layered_sols(self.sols1, layer, order))
+          
+
 
     def construct_boundary_equations(self, order):
         R = CoordSys3D("")
@@ -352,5 +422,6 @@ if __name__ == "__main__":
     horn = Waveguide(field_vars, layers, geometry, phi_vars)
     d = Domain(horn)
     d.solve_general_form_zero()
-    d.construct_boundary_equations(0)
+    d.solve_general_form_first()
+# d.construct_boundary_equations(0)
     # d.solve_arbitrary_constants()
