@@ -13,7 +13,7 @@ def preview_collection(equations):
             [latex(eq, mode="equation*") for eq in equations],
             "",
         )
-    if isinstance(equations, dict):
+    elif isinstance(equations, dict):
         out = reduce(
             lambda x, y: x + y,
             [latex(Eq(lhs, rhs), mode="equation*") for lhs, rhs in equations.items()],
@@ -21,6 +21,7 @@ def preview_collection(equations):
         )
     else:
         out = latex(equations, mode="equation*")
+
     preview(
         out,
         output="png",
