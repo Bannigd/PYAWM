@@ -37,23 +37,10 @@ Waveguide(field_vars, layers, geometry, phi_vars)
 - `solve_general_form_first()` —  решение в первом приближении
 - `construct_boundary_equations(order)` —  построение граничных условий
 
-## Пример использования
+## Пример запуска
 
-```python
-from pyawm.main import Layer, Waveguide, Domain
-import sympy as sp
-
-field_vars = [x, z]
-phi_vars = [z]
-layers = [Layer.SUBSTRATE, Layer.FILM, Layer.COVER]
-
-geometry = [
-    (Layer.FILM,      Layer.COVER,     sp.Function("h_f")),
-    (Layer.SUBSTRATE, Layer.FILM,      sp.Function("h_s"))
-]
-
-horn = Waveguide(field_vars, layers, geometry, phi_vars)
-d = Domain(horn)
-d.solve_general_form_zero()
-d.solve_general_form_first()
+```bash
+python -i pyawm/main.py
 ```
+
+Далее в интерактивной сесси можно работать с полученными выражениями.
