@@ -24,7 +24,6 @@ PYAWM/
 │   ├── mmcp24.ipynb            # Материалы конференции MMCP 2024
 │   ├── determinant compute speed-up.ipynb  # Оптимизация вычисления детерминанта
 │   └── luneberg_lens_numbers.txt  # Численные данные линзы
-├── images/                     # Генерируемые изображения (по датам)
 └── requirements.txt            # Зависимости Python
 ```
 
